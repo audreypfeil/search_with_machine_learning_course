@@ -105,7 +105,7 @@ def get_opensearch():
     return client
 
 
-def index_file(file, index_name, synonyms=False, documents_url="http://localhost:5000/documents/annotate", reduced=False):
+def index_file(file, index_name, documents_url="http://localhost:5000/documents/annotate", reduced=False, synonyms=False):
     docs_indexed = 0
     client = get_opensearch()
     logger.info(f'Processing file : {file}')
