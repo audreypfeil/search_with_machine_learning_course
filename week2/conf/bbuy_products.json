@@ -12,6 +12,7 @@
         "name_synonym": {
           "tokenizer": "whitespace",
           "filter": [
+          "lowercase",
           "porter_stemmer",
           "term_synonyms"
           ]
@@ -34,7 +35,10 @@
         },
         "term_synonyms": {
           "type": "synonym",
-          "synonyms_path": "/workspace/search_with_machine_learning_course/week2/synonyms.csv"
+          "synonyms_path": "synonyms.csv"
+        },
+        "porter_stemmer": {
+          "type": "porter_stem"
         }
       }
     }

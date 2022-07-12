@@ -10,6 +10,7 @@ services:
 
     volumes:
       - opensearch-data1:/usr/share/opensearch/data  #todo: figure this out so we can have persistent storage
+      - /workspace/datasets/fasttext/synonyms.csv:/usr/share/opensearch/config/synonyms.csv
     ports:
       - 9200:9200
       - 9600:9600 # required for Performance Analyzer
