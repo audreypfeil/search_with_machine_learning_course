@@ -310,7 +310,7 @@ if __name__ == "__main__":
                 for label, score in zip(labels, scores):
                     sum_scores += score
                     category.append(label.replace('__label__', ''))
-                    print(sum_scores)
+                    print(label, score)
                     if sum_scores > 0.4:
                         print('using more than one category as a filter', category)
                         break
@@ -321,6 +321,8 @@ if __name__ == "__main__":
             else:          
                 category = [labels[0].replace('__label__', '')]
                 print('using top category as filter', labels[0], scores[0])
+        else:
+            category=False
 
         search(client=opensearch, user_query=query, index=index_name, synonyms=args.synonyms, category=category)
 
