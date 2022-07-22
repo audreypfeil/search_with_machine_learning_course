@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 import numpy as np
 import csv
+import string
 
 # Useful if you want to perform stemming.
 import nltk
@@ -43,10 +44,37 @@ for child in root:
         categories.append(leaf_id)
         parents.append(cat_path_ids[-2])
 parents_df = pd.DataFrame(list(zip(categories, parents)), columns =['category', 'parent'])
+parents_dict = dict(zip(parents, categories))
 
 # Read the training data into pandas, only keeping queries with non-root categories in our category tree.
 df = pd.read_csv(queries_file_name)[['category', 'query']]
 df = df[df['category'].isin(categories)]
+
+def query_norm(text):
+    for punctuation in string.punctuation:
+        text = text.replace(punctuation, '')
+    text = ' '.join(text.split()).lower()
+    text = stemmer.stem(text)
+    return text
+
+# was spending too much time getting this function to work and had to reference classmates' code
+def queries_to_cat(query_df, category_map, min_queries):
+    count = 0
+    while True:
+        count += 1
+        queries_to_agg = query_df[query_df.groupby(['category'])['norm_query'].transform('count') < min_queries]
+        if len(queries_to_agg) == 0 or count >= 10:
+            break
+        df_pruned = query_df[query_df.groupby(['category'])['norm_query'].transform('count') >= min_queries]
+        queries_to_agg['category'] = queries_to_agg['category'].apply(lambda cat: category_map.get(cat, np.nan))
+        queries_to_agg = queries_to_agg.dropna()
+        query_df = pd.concat([df_pruned, queries_to_agg]) 
+    return query_df
+
+
+df['norm_query'] = df['query'].apply(query_norm)
+df = queries_to_cat(df, parents_dict, min_queries)
+
 
 # IMPLEMENT ME: Convert queries to lowercase, and optionally implement other normalization, like stemming.
 
@@ -57,5 +85,5 @@ df['label'] = '__label__' + df['category']
 
 # Output labeled query data as a space-separated file, making sure that every category is in the taxonomy.
 df = df[df['category'].isin(categories)]
-df['output'] = df['label'] + ' ' + df['query']
+df['output'] = df['label'] + ' ' + df['norm_query']
 df[['output']].to_csv(output_file_name, header=False, sep='|', escapechar='\\', quoting=csv.QUOTE_NONE, index=False)

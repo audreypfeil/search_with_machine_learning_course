@@ -11,11 +11,28 @@ from urllib.parse import urljoin
 import pandas as pd
 import fileinput
 import logging
+import fasttext
+import string
+
+import nltk
+stemmer = nltk.stem.PorterStemmer()
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
+
+query_classifier_model_path = "/workspace/datasets/fasttext/query_model_1000.bin"
+query_classifier_model = fasttext.load_model(query_classifier_model_path)
+
+def normalize_query(query, punc, stem):
+    if punc:
+        for punctuation in string.punctuation:
+            query = query.replace(punctuation, '')
+        query = ' '.join(query.split()).lower()
+    if stem:
+        query = stemmer.stem(query)
+    return query
 
 # expects clicks and impressions to be in the row
 def create_prior_queries_from_group(
@@ -191,11 +208,35 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", synonyms=False):
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", synonyms=False, category=False):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], synonyms=synonyms)
+    filter = None
+    if category:
+        if len(category) == 1:
+            filter = {"term": {"categoryPathIds": category[0]}}
+        else:
+            should = []
+            for label in category:
+                term_clause = {
+                        "term": {
+                        "categoryPathIds": label
+                        }
+                    }
+                should.append(term_clause)
+
+            filter = [
+                {
+                "bool": {
+                    "should": should,
+                    "minimum_should_match":1
+                }
+                }
+            ]
+            
+
+    query_obj = create_query(user_query, click_prior_query=None, filters=filter, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], synonyms=synonyms)
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -219,6 +260,12 @@ if __name__ == "__main__":
                          help='The OpenSearch admin.  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
     general.add_argument('--synonyms', action='store_true',
                          help='Use synonym file for product name')
+    general.add_argument('--use_categories', action='store_true',
+                         help='Use category/categories as a filter')
+    general.add_argument('--punc', action='store_true',
+                         help='Remove punctation from query for category classification')
+    general.add_argument('--stem', action='store_true',
+                         help='Stem query for category classification')
 
     args = parser.parse_args()
 
@@ -254,9 +301,27 @@ if __name__ == "__main__":
         query = query.rstrip()
         if query == "Exit":
             break
+        if args.use_categories:
+            labels, scores = query_classifier_model.predict(normalize_query(query, args.punc, args.stem), 5)
 
-        search(client=opensearch, user_query=query, index=index_name, synonyms=args.synonyms)
+            if scores[0] < 0.4:
+                category = []
+                sum_scores = 0.0
+                for label, score in zip(labels, scores):
+                    sum_scores += score
+                    category.append(label.replace('__label__', ''))
+                    print(sum_scores)
+                    if sum_scores > 0.4:
+                        print('using more than one category as a filter', category)
+                        break
+                if sum_scores <= 0.4:
+                    print('Category filter not applied, threshold not met')
+                    category=False
 
-        print(query_prompt)
+            else:          
+                category = [labels[0].replace('__label__', '')]
+                print('using top category as filter', labels[0], scores[0])
+
+        search(client=opensearch, user_query=query, index=index_name, synonyms=args.synonyms, category=category)
 
     
